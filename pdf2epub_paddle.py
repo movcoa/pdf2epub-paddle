@@ -367,11 +367,18 @@ def main():
         print("    Please set it using: export PADDLE_API_TOKEN='your_token_here'")
         return
 
-    if not args.output:
-        args.output = os.path.splitext(input_path)[0] + ".epub"
+    args.output = os.path.splitext(input_path)[0] + ".epub"
 
-    # Temporary directory for intermediate files
-    work_dir = "paddle_epub_work"
+    # Create a unique work directory based on the input filename hash
+    import hashlib
+
+    file_hash = hashlib.md5(os.path.basename(input_path).encode("utf-8")).hexdigest()[
+        :8
+    ]
+    work_dir = f"paddle_epub_work_{file_hash}"
+
+    print(f"[*] Work directory: {work_dir}")
+
     image_dir = os.path.join(work_dir, "images")
     os.makedirs(image_dir, exist_ok=True)
 
