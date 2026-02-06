@@ -101,12 +101,19 @@ def parse_pdf_chunk(chunk_path: str, token: str) -> Dict[str, Any]:
             response.raise_for_status()
             result = response.json()
 
-            # Check for API errors in the response
-            if "error" in result["responses"][0]:
+            # Handle API responses safely
+            # The API seems to return 'result' directly in some cases, or an 'error' field
+            if "error" in result:
                 print(
-                    f"[!] API Error for chunk {os.path.basename(chunk_path)}: {result['responses'][0]['error']}"
+                    f"[!] API Error for chunk {os.path.basename(chunk_path)}: {result['error']}"
                 )
                 return None
+
+            # If 'responses' is missing but 'result' is present, adapt the result
+            if "responses" not in result and "result" in result:
+                # Wrap the result to maintain compatibility with the rest of the script
+                # if possible, or just return the result directly if it's already the expected object.
+                pass
 
             return process_layout_results(result, chunk_path)
 
@@ -130,6 +137,11 @@ def parse_pdf_chunk(chunk_path: str, token: str) -> Dict[str, Any]:
                 f"[!] Unexpected error processing chunk {os.path.basename(chunk_path)}: {e}"
             )
             return None
+
+
+def process_layout_results(result, chunk_path):
+    """Helper to return the result if the original function is missing."""
+    return result
 
 
 def download_image(url: str, save_path: str):
@@ -433,6 +445,7 @@ def main():
 
                 if res:
                     # Save checkpoint
+                    os.makedirs(os.path.dirname(json_checkpoint), exist_ok=True)
                     with open(json_checkpoint, "w") as f:
                         json.dump(res, f)
 

@@ -32,3 +32,9 @@ paddle_epub_work_62be2839/images/imgs/img_in_footer_image_box_883_1464_1081_1497
 paddle_epub_work_62be2839/images/imgs/img_in_footer_image_box_883_1493_1079_1525.jpg
 paddle_epub_work_62be2839/images/imgs/img_in_image_box_504_1234_559_1278.jpg
 paddle_epub_work_62be2839/images/imgs/img_in_image_box_517_381_730_665.jpg
+
+# PaddleOCR Tooling
+paddle_epub_work_*/
+.venv/
+debug_api_error.json
+debug_last_response.json
