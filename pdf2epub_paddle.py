@@ -442,13 +442,11 @@ def create_epub(title: str, results: List[Dict], output_file: str, image_dir: st
                     if rel_path not in [item.file_name for item in book.get_items()]:
                         book.add_item(epub_img)
 
-            # 3. Concatenate Text
-            # TODO: "Headers, page number, footers things like that should be cleaned out"
-            # Since we only have the markdown, we have to parse it.
-            # Simple heuristic: Split lines. If a line is short and looks like a page number, skip it.
-            # But the API *Layout Analysis* usually handles this. If useDocOrientationClassify=False, maybe less so.
-            # We'll trust the API markdown for now but do basic cleaning.
-
+            # 3. Concatenate Text with paragraph reflow
+            # Reflow lines into continuous paragraphs to fix sentence splitting issues
+            # Pages often break sentences mid-flow, and OCR can split paragraphs
+            # into separate lines that should be joined.
+            
             lines = page_md.split("\n")
             cleaned_lines = []
             for line in lines:
@@ -456,8 +454,90 @@ def create_epub(title: str, results: List[Dict], output_file: str, image_dir: st
                 if line.strip().isdigit():
                     continue
                 cleaned_lines.append(line)
-
-            full_markdown += "\n".join(cleaned_lines) + "\n\n"
+            
+            # Reflow: join lines that appear to be part of the same paragraph
+            reflowed_paragraphs = []
+            current_para = ""
+            
+            # Terminal punctuation that indicates end of sentence/paragraph
+            terminal_chars = ('.', '!', '?', '"', "'", ')', ']', '}', ':', ';')
+            # Patterns that indicate a line is a header or special block
+            header_pattern = re.compile(r'^(#{1,6}\s|>|\s*[-*]\s|\d+\.)')
+            # Characters that indicate a line should not be joined with next
+            non_join_endings = (':', ';', ',', '-')
+            
+            for i, line in enumerate(cleaned_lines):
+                stripped = line.rstrip()
+                if not stripped:
+                    # Empty line indicates paragraph break
+                    if current_para:
+                        reflowed_paragraphs.append(current_para)
+                        current_para = ""
+                    continue
+                
+                # Check if this line is a header/list/blockquote
+                is_special = header_pattern.match(stripped)
+                
+                if is_special:
+                    # Flush current paragraph before special line
+                    if current_para:
+                        reflowed_paragraphs.append(current_para)
+                        current_para = ""
+                    reflowed_paragraphs.append(stripped)
+                elif not current_para:
+                    # Start of new paragraph
+                    current_para = stripped
+                else:
+                    # Check if current_para ends with terminal punctuation
+                    # or if it ends with colon/comma/semicolon (likely list/address item)
+                    current_ends = current_para.rstrip()
+                    
+                    if current_ends.endswith(terminal_chars):
+                        # Previous paragraph ends with terminal punctuation
+                        # This line starts a new paragraph
+                        reflowed_paragraphs.append(current_para)
+                        current_para = stripped
+                    elif current_ends and current_ends[-1] in non_join_endings:
+                        # Previous line ends with :, ;, , or - - likely list item or address
+                        # Don't join, start new paragraph
+                        reflowed_paragraphs.append(current_para)
+                        current_para = stripped
+                    elif len(stripped) < 20 and not stripped.endswith(terminal_chars):
+                        # Short line that doesn't end with punctuation - might be 
+                        # a title, caption, or deliberate short line (poetry, etc.)
+                        reflowed_paragraphs.append(current_para)
+                        current_para = stripped
+                    else:
+                        # Likely continuation of same paragraph
+                        current_para = current_ends + " " + stripped
+            
+            # Don't forget the last paragraph
+            if current_para:
+                reflowed_paragraphs.append(current_para)
+            
+            # Join paragraphs and append to full_markdown
+            # But first, check if we need to merge with the previous page's content
+            # (sentences can be split across page boundaries)
+            page_markdown = "\n\n".join(reflowed_paragraphs)
+            
+            if full_markdown and page_markdown:
+                # Check if full_markdown ends mid-sentence (no terminal punctuation)
+                # and page_markdown starts with a continuation (not a header)
+                full_stripped = full_markdown.rstrip()
+                page_lines = page_markdown.split('\n')
+                first_page_line = page_lines[0].strip() if page_lines else ""
+                
+                # Check if we should merge (previous doesn't end with terminal, next isn't a header)
+                ends_mid_sentence = full_stripped and not full_stripped.endswith(terminal_chars)
+                next_is_header = header_pattern.match(first_page_line) if first_page_line else False
+                
+                if ends_mid_sentence and not next_is_header:
+                    # Merge: remove the trailing newlines and join with space
+                    full_markdown = full_markdown.rstrip() + " " + page_markdown + "\n\n"
+                else:
+                    full_markdown += page_markdown + "\n\n"
+            else:
+                full_markdown += page_markdown + "\n\n"
 
     # Split markdown into chapters based on headers (# Header)
     # If no headers found, put everything in one chapter.
