@@ -9,6 +9,7 @@ dependencies = [
     "pymupdf>=1.23.0",
     "EbookLib>=0.17.1",
     "python-dotenv>=1.0.0",
+    "markdown>=3.5",
 ]
 
 [tool.uv]

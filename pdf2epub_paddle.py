@@ -324,10 +324,12 @@ def create_epub(title: str, results: List[Dict], output_file: str, image_dir: st
 
     # CSS for the book
     style = """
-    body { font-family: sans-serif; line-height: 1.6; }
-    h1 { text-align: center; color: #333; }
-    h2 { color: #555; }
-    p { margin-bottom: 1em; }
+    body { font-family: serif; line-height: 1.8; text-align: justify; margin: 1em; }
+    h1 { text-align: center; margin: 1.5em 0 0.8em 0; font-size: 1.6em; }
+    h2 { margin: 1.2em 0 0.6em 0; font-size: 1.3em; }
+    h3 { margin: 1em 0 0.5em 0; font-size: 1.1em; }
+    p { margin-bottom: 0.8em; text-indent: 1.5em; }
+    blockquote { margin: 1em 2em; font-style: italic; }
     img { max-width: 100%; height: auto; display: block; margin: 1em auto; }
     """
     nav_css = epub.EpubItem(
