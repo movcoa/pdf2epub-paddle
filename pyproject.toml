@@ -8,6 +8,7 @@ dependencies = [
     "requests>=2.31.0",
     "pymupdf>=1.23.0",
     "EbookLib>=0.17.1",
+    "python-dotenv>=1.0.0",
 ]
 
 [tool.uv]

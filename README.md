@@ -8,6 +8,8 @@ This tool converts scanned PDF books into clean, readable EPUB ebooks using the 
 
 - **High-Quality Layout Analysis**: Uses PaddleOCR to intelligently detect paragraphs, headers, images, and tables.
 - **Smart Chapter Splitting**: Automatically splits books into chapters based on headers (e.g., "Chapter 1", "Part I").
+- **Cover Image**: Automatically extracts the first page of the PDF as the EPUB cover.
+- **Metadata Support**: Interactively prompts for book title and author based on OCR'd first-page text, or accepts them via CLI arguments.
 - **Image Embedding**: Preserves images from the original PDF.
 - **Clean Output**: Removes headers, footers, and page numbers for a seamless reading experience.
 - **Robustness**:
@@ -46,11 +48,36 @@ This project uses [uv](https://github.com/astral-sh/uv) for fast, reliable depen
     curl -LsSf https://astral.sh/uv/install.sh | sh
     ```
 
-3. **Run directly with `uv`** (handles virtualenv & dependencies automatically):
+3. **Set up your API token**:
 
     ```bash
-    export PADDLE_API_TOKEN='your_api_token_here'
+    cp .env.example .env
+    ```
+
+    Edit `.env` and add your token:
+
+    ```
+    PADDLE_API_TOKEN=your_api_token_here
+    ```
+
+4. **Run directly with `uv`** (handles virtualenv & dependencies automatically):
+
+    ```bash
     uv run pdf2epub_paddle.py /path/to/your/book.pdf
+    ```
+
+    The tool will display the OCR'd text from the first page and prompt you to enter the book title and author.
+
+    You can also provide metadata directly via CLI arguments:
+
+    ```bash
+    uv run pdf2epub_paddle.py --title "Book Title" --author "Author Name" /path/to/your/book.pdf
+    ```
+
+    To specify a custom output path:
+
+    ```bash
+    uv run pdf2epub_paddle.py --output /path/to/output.epub /path/to/your/book.pdf
     ```
 
 ### Alternative: Standard Pip
@@ -70,12 +97,20 @@ If you prefer standard pip:
     pip install .  # Installs from pyproject.toml
     ```
 
-3. Run:
+3. Set up your API token:
 
     ```bash
-    export PADDLE_API_TOKEN='your_api_token_here'
+    cp .env.example .env
+    # Edit .env and add your token
+    ```
+
+4. Run:
+
+    ```bash
     python pdf2epub_paddle.py /path/to/your/book.pdf
     ```
+
+> **Note**: You can also set the token via environment variable directly: `export PADDLE_API_TOKEN='your_token'`. The `.env` file is loaded automatically but will not override an existing environment variable.
 
 ## Configuration
 

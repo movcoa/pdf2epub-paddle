@@ -10,6 +10,10 @@ import requests
 import fitz  # PyMuPDF
 from ebooklib import epub
 from typing import List, Dict, Any
+from dotenv import load_dotenv
+
+# Load .env file if present (does not override existing env vars)
+load_dotenv()
 
 # --- Configuration ---
 API_URL = "https://s9a8lfu1jd2efbl7.aistudio-app.com/layout-parsing"
@@ -144,6 +148,50 @@ def process_layout_results(result, chunk_path):
     return result
 
 
+def extract_cover_image(pdf_path: str, output_path: str) -> str:
+    """Renders the first page of a PDF as a PNG image for use as an EPUB cover."""
+    doc = fitz.open(pdf_path)
+    try:
+        if len(doc) == 0:
+            print("[!] PDF has no pages; skipping cover extraction.")
+            return None
+        page = doc.load_page(0)
+        mat = fitz.Matrix(2, 2)  # 2x zoom (~144 DPI)
+        pix = page.get_pixmap(matrix=mat)
+        pix.save(output_path)
+        print(f"[*] Cover image extracted to {output_path}")
+        return output_path
+    except Exception as e:
+        print(f"[!] Failed to extract cover image: {e}")
+        return None
+    finally:
+        doc.close()
+
+
+def extract_metadata_interactive(results: List[Dict], default_title: str) -> Dict[str, str]:
+    """Shows the first page OCR text and prompts the user for title and author."""
+    first_page_text = ""
+    try:
+        first_page_text = results[0]["result"]["layoutParsingResults"][0]["markdown"]["text"]
+    except (IndexError, KeyError, TypeError):
+        pass
+
+    if first_page_text:
+        print("\n--- First page OCR text ---")
+        print(first_page_text.strip())
+        print("----------------------------\n")
+    else:
+        print("\n[!] Could not extract text from the first page.\n")
+
+    title = input(f"Enter book title (or press Enter to use '{default_title}'): ").strip()
+    if not title:
+        title = default_title
+
+    author = input("Enter author name (or press Enter to skip): ").strip()
+
+    return {"title": title, "author": author if author else None}
+
+
 def download_image(url: str, save_path: str):
     """Downloads an image from a URL to a local path."""
     try:
@@ -158,7 +206,8 @@ def download_image(url: str, save_path: str):
     return False
 
 
-def create_epub(title: str, results: List[Dict], output_file: str, image_dir: str):
+def create_epub(title: str, results: List[Dict], output_file: str, image_dir: str,
+                cover_image_path: str = None, author: str = None):
     """
     Creates an EPUB file from the aggregated API results.
     """
@@ -166,6 +215,15 @@ def create_epub(title: str, results: List[Dict], output_file: str, image_dir: st
     book.set_identifier(f"id_{title}")
     book.set_title(title)
     book.set_language("en")  # Or auto-detect?
+
+    if author:
+        book.add_author(author)
+
+    # Set cover image
+    if cover_image_path and os.path.exists(cover_image_path):
+        with open(cover_image_path, "rb") as f:
+            cover_data = f.read()
+        book.set_cover("cover.png", cover_data)
 
     chapters = []
 
@@ -386,6 +444,8 @@ def main():
     parser.add_argument(
         "--output", "-o", help="Path to output EPUB file (default: input_name.epub)"
     )
+    parser.add_argument("--title", help="Book title (skips interactive prompt)")
+    parser.add_argument("--author", help="Author name (skips interactive prompt)")
     args = parser.parse_args()
 
     input_path = args.input_pdf
@@ -398,7 +458,8 @@ def main():
         print("    Please set it using: export PADDLE_API_TOKEN='your_token_here'")
         return
 
-    args.output = os.path.splitext(input_path)[0] + ".epub"
+    if not args.output:
+        args.output = os.path.splitext(input_path)[0] + ".epub"
 
     # Create a unique work directory based on the input filename hash
     import hashlib
@@ -417,6 +478,9 @@ def main():
         # Step 1: Chunking
         print("[-] Step 1: Splitting PDF...")
         chunk_paths = split_pdf(input_path)
+
+        # Step 1.5: Extract cover image
+        cover_path = extract_cover_image(input_path, os.path.join(work_dir, "cover.png"))
 
         # Step 2: API Processing
         results = []
@@ -471,9 +535,17 @@ def main():
                 )
                 sys.exit(1)
 
+        # Step 2.5: Metadata extraction
+        default_title = os.path.splitext(os.path.basename(input_path))[0]
+        if args.title:
+            metadata = {"title": args.title, "author": args.author}
+        else:
+            metadata = extract_metadata_interactive(results, default_title)
+
         # Step 3: Generation
         print("[-] Step 3: Generating EPUB...")
-        create_epub(os.path.basename(input_path), results, args.output, image_dir)
+        create_epub(metadata["title"], results, args.output, image_dir,
+                    cover_image_path=cover_path, author=metadata["author"])
 
     finally:
         # Cleanup temp chunks
