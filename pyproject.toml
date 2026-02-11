@@ -12,5 +12,5 @@ dependencies = [
     "markdown>=3.5",
 ]
 
-[tool.uv]
-dev-dependencies = []
+[dependency-groups]
+dev = []

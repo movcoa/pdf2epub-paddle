@@ -197,6 +197,7 @@ def extract_candidate_headings(results: List[Dict]) -> List[Dict]:
     """Scans API results and extracts candidate chapter headings with page numbers."""
     candidates = []
     any_header_pattern = re.compile(r"^(#{1,2})\s+(.+)$")
+    latex_pattern = re.compile(r"\$\s*\\underline\{(.+?)\}\s*\$")
     global_page = 0
 
     for result in results:
@@ -210,8 +211,13 @@ def extract_candidate_headings(results: List[Dict]) -> List[Dict]:
                     continue
                 match = any_header_pattern.match(line)
                 if match:
+                    title = match.group(2).strip()
+                    # Clean LaTeX artifacts (e.g. "$ \underline{3} $ Title" -> "Title")
+                    title = latex_pattern.sub("", title).strip()
+                    # Strip leading bare numbers left after LaTeX cleanup (e.g. "3 What Is..." -> "What Is...")
+                    title = re.sub(r"^\d+\s+", "", title).strip()
                     candidates.append({
-                        "title": match.group(2).strip(),
+                        "title": title,
                         "page": global_page,
                         "level": len(match.group(1)),
                         "md_line": line,
@@ -219,7 +225,30 @@ def extract_candidate_headings(results: List[Dict]) -> List[Dict]:
     return candidates
 
 
-def review_toc_interactive(candidates: List[Dict]) -> List[Dict]:
+def filter_heading_candidates(candidates: List[Dict]) -> List[Dict]:
+    """Adaptively filters headings by trying H1-only, then keyword match, then all."""
+    chapter_keyword = re.compile(
+        r"^(?:Chapter|Part|Lecture|Preface|Intro|Appendix|Prologue|Epilogue|"
+        r"Conclusion|Acknowledgements|Contents|Abstract|序|前言|导论|目录|附录|后记|"
+        r"第[零一二三四五六七八九十百千0-9]+[篇章节讲])",
+        re.IGNORECASE,
+    )
+
+    # Strategy 1: H1-only (skip front-matter on first 2 pages)
+    h1 = [h for h in candidates if h["level"] == 1 and h["page"] > 2]
+    if len(h1) >= 4:
+        return h1
+
+    # Strategy 2: Keyword-matched headings (any level)
+    keyword_matches = [h for h in candidates if chapter_keyword.match(h["title"])]
+    if len(keyword_matches) >= 3:
+        return keyword_matches
+
+    # Strategy 3: All headings (last resort)
+    return candidates
+
+
+def review_toc_interactive(candidates: List[Dict], all_candidates: List[Dict] = None) -> List[Dict]:
     """Interactive prompt for reviewing and editing the auto-detected TOC."""
     if not candidates:
         print("\n[!] No chapter headings detected. The book will be a single chapter.")
@@ -232,30 +261,49 @@ def review_toc_interactive(candidates: List[Dict]) -> List[Dict]:
             indent = "  " if h["level"] == 1 else "    "
             print(f"  {i+1:>3}  | {h['page']:>4} | {indent}{h['title']}")
 
+    def _show_options():
+        print()
+        print("Options:")
+        print("  [Enter]    Accept all headings as chapter split points")
+        print("  1,3,5      Remove headings by number (comma-separated)")
+        print("  +1,3,5     Keep ONLY these headings (comma-separated)")
+        if all_candidates and len(all_candidates) > len(candidates):
+            print(f"  all        Show all {len(all_candidates)} headings (including sub-sections)")
+        print("  none       No chapters (entire book as single chapter)")
+        print()
+
     print("\n--- Detected Chapter Headings ---")
     _print_heading_list(candidates)
-    print()
-    print("Options:")
-    print("  [Enter]  Accept all headings as chapter split points")
-    print("  1,3,5    Remove headings by number (comma-separated)")
-    print("  none     No chapters (entire book as single chapter)")
-    print()
+    _show_options()
 
     while True:
-        choice = input("Your choice: ").strip().lower()
+        choice = input("Your choice: ").strip()
 
         if choice == "":
             return list(candidates)
-        elif choice == "none":
+        elif choice.lower() == "none":
             return []
+        elif choice.lower() == "all" and all_candidates and len(all_candidates) > len(candidates):
+            candidates = all_candidates
+            all_candidates = None
+            print(f"\n--- All Headings ({len(candidates)}) ---")
+            _print_heading_list(candidates)
+            _show_options()
+            continue
         else:
             try:
-                to_remove = set()
+                # Detect keep mode (+) vs remove mode (default)
+                keep_mode = choice.startswith("+")
+                if keep_mode:
+                    choice = choice[1:]  # strip the +
+
+                nums = set()
                 valid = True
                 for part in choice.split(","):
-                    num = int(part.strip())
+                    part = part.strip().lstrip("-")  # allow optional - prefix
+                    num = int(part)
                     if 1 <= num <= len(candidates):
-                        to_remove.add(num)
+                        nums.add(num)
                     else:
                         print(f"  [!] Invalid number: {num} (must be 1-{len(candidates)})")
                         valid = False
@@ -264,7 +312,10 @@ def review_toc_interactive(candidates: List[Dict]) -> List[Dict]:
                 if not valid:
                     continue
 
-                confirmed = [h for i, h in enumerate(candidates) if (i + 1) not in to_remove]
+                if keep_mode:
+                    confirmed = [h for i, h in enumerate(candidates) if (i + 1) in nums]
+                else:
+                    confirmed = [h for i, h in enumerate(candidates) if (i + 1) not in nums]
 
                 if confirmed:
                     print(f"\nUpdated TOC ({len(confirmed)} chapters):")
@@ -278,11 +329,11 @@ def review_toc_interactive(candidates: List[Dict]) -> List[Dict]:
                 else:
                     print("\n--- Detected Chapter Headings ---")
                     _print_heading_list(candidates)
-                    print()
+                    _show_options()
                     continue
 
             except ValueError:
-                print("  [!] Invalid input. Enter comma-separated numbers, 'none', or press Enter.")
+                print("  [!] Invalid input. Use numbers like '1,3,5' or '+1,3,5' for keep mode.")
                 continue
 
 
@@ -328,7 +379,7 @@ def create_epub(title: str, results: List[Dict], output_file: str, image_dir: st
     h1 { text-align: center; margin: 1.5em 0 0.8em 0; font-size: 1.6em; }
     h2 { margin: 1.2em 0 0.6em 0; font-size: 1.3em; }
     h3 { margin: 1em 0 0.5em 0; font-size: 1.1em; }
-    p { margin-bottom: 0.8em; text-indent: 1.5em; }
+    p { margin-bottom: 0.8em; }
     blockquote { margin: 1em 2em; font-style: italic; }
     img { max-width: 100%; height: auto; display: block; margin: 1em auto; }
     """
@@ -439,14 +490,18 @@ def create_epub(title: str, results: List[Dict], output_file: str, image_dir: st
         is_split_point = False
         if match:
             heading_text = match.group(2).strip()
+            # Clean LaTeX artifacts for matching
+            heading_text = re.sub(r"\$\s*\\underline\{(.+?)\}\s*\$", "", heading_text).strip()
+            heading_text = re.sub(r"^\d+\s+", "", heading_text).strip()
             # Determine if this heading is a chapter split point
             if confirmed_titles is not None:
                 is_split_point = heading_text in confirmed_titles
             else:
                 is_split_point = bool(major_header_pattern.match(line))
 
-        # Clean up LaTeX-style footnotes ($ ^{①} $ -> <sup>①</sup>)
-        line = re.sub(r"\$\s*\^\{(.+?)\}\s*\$", r"", line)
+        # Clean up LaTeX artifacts
+        line = re.sub(r"\$\s*\^\{(.+?)\}\s*\$", r"", line)  # superscripts
+        line = re.sub(r"\$\s*\\underline\{(.+?)\}\s*\$", "", line)  # underlines
 
         if match:
             if is_split_point:
@@ -665,7 +720,10 @@ def main():
         else:
             print("[-] Step 2.75: Detecting chapter headings...")
             candidates = extract_candidate_headings(results)
-            confirmed_headings = review_toc_interactive(candidates)
+            filtered = filter_heading_candidates(candidates)
+            if len(candidates) > len(filtered):
+                print(f"  ({len(filtered)} chapter headings found, {len(candidates) - len(filtered)} sub-headings hidden)")
+            confirmed_headings = review_toc_interactive(filtered, all_candidates=candidates)
 
         # Step 3: Generation
         print("[-] Step 3: Generating EPUB...")
