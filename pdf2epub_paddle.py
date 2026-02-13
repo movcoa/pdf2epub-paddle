@@ -346,7 +346,7 @@ def download_image(url: str, save_path: str):
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             with open(save_path, "wb") as f:
                 f.write(response.content)
-                time.sleep(random.uniform(5,10))
+                time.sleep(random.uniform(15,30))
             return True
     except Exception as e:
         print(f"[!] Failed to download image {url}: {e}")
