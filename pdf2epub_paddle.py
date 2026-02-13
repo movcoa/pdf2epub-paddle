@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- Configuration ---
-API_URL = "https://s9a8lfu1jd2efbl7.aistudio-app.com/layout-parsing"
+API_URL = "https://d8y5fdsclb20d640.aistudio-app.com/layout-parsing"
 # Environment variable for API token
 API_TOKEN = os.getenv("PADDLE_API_TOKEN", "")
 
