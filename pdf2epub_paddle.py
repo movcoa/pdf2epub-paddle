@@ -1,4 +1,5 @@
 import os
+import time
 import sys
 import argparse
 import base64
@@ -345,7 +346,8 @@ def download_image(url: str, save_path: str):
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             with open(save_path, "wb") as f:
                 f.write(response.content)
-            return True
+                time.sleep(1.5)
+             return True
     except Exception as e:
         print(f"[!] Failed to download image {url}: {e}")
     return False
