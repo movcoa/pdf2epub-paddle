@@ -347,7 +347,7 @@ def download_image(url: str, save_path: str):
             with open(save_path, "wb") as f:
                 f.write(response.content)
                 time.sleep(1.5)
-             return True
+            return True
     except Exception as e:
         print(f"[!] Failed to download image {url}: {e}")
     return False
