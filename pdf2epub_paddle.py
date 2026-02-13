@@ -339,18 +339,28 @@ def review_toc_interactive(candidates: List[Dict], all_candidates: List[Dict] = 
 
 
 def download_image(url: str, save_path: str):
-    """Downloads an image from a URL to a local path."""
-    try:
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            with open(save_path, "wb") as f:
-                f.write(response.content)
-                time.sleep(random.uniform(15,30))
-            return True
-    except Exception as e:
-        print(f"[!] Failed to download image {url}: {e}")
+    """具有强力重试和随机延迟的下载函数"""
+    import random
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'
+    }
+    for attempt in range(5):
+        try:
+            # 随机休息 10 到 20 秒，彻底避开高频检测
+            time.sleep(random.uniform(10, 20))
+            response = requests.get(url, headers=headers, timeout=30)
+            if response.status_code == 200:
+                os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                with open(save_path, "wb") as f:
+                    f.write(response.content)
+                return True
+            elif response.status_code == 403:
+                time.sleep(30)
+        except Exception as e:
+            print(f"[!] 第 {attempt + 1} 次重试失败: {e}")
+            time.sleep(10)
     return False
+
 
 
 
